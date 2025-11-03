@@ -1,0 +1,46 @@
+html, body, #root {
+  height: 100%;
+}
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ส่วนเนื้อหาให้ยืดเต็มที่ */
+.body {
+  flex: 1;                 /* กินพื้นที่ที่เหลือจาก header/footer */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: none;          /* ถ้าอยากให้กว้างเต็ม ให้ไม่ล็อก 1200px */
+  width: 100%;
+  padding: 16px;
+  margin: 0;
+}
+
+/* กล่องที่หุ้ม iframe ให้ยืดเต็มพื้นที่แนวตั้ง */
+.dashboard-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* เอา min-height เดิมออก ถ้ายังมีให้ลบ */
+  min-height: 0;
+}
+
+/* พื้นที่แสดงผล (iframe container) */
+.viewer {
+  flex: 1;          /* ยืดเต็มที่ */
+  min-height: 0;    /* สำคัญเพื่อให้ลูกสูงได้เต็ม */
+  border: 2px solid #ddd;      /* แล้วแต่ชอบ */
+  border-radius: 10px;
+  overflow: hidden; /* เก็บขอบโค้ง */
+}
+
+/* ตัว iframe เองต้องสูง/กว้าง 100% */
+.viewer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
