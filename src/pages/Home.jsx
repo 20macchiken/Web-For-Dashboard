@@ -25,11 +25,23 @@ export default function Home() {
         placeholder="https://grafana.example.com/d/abc123/my-dashboard?orgId=1&from=now-6h&to=now"
       />
 
-      <div style={{ marginTop: 16, height: '80vh', border: '1px solid #ddd' }}>
+      <div style={{
+        marginTop: 16,
+        height: '80vh',
+        border: '1px solid #ddd',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
         <iframe
           title="grafana-dashboard"
           src={dashboardURL}
-          style={{ width: '150%', height: '150%', border: 0 }}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 0,
+            transform: 'scale(1)',
+            transformOrigin: 'top left'
+          }}
         />
       </div>
     </div>
