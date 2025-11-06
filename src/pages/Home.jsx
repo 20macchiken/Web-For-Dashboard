@@ -1,15 +1,31 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 export default function Home() {
+  const { user } = useAuth()
+
+  const storageKey = `dashboardURL_${user?.username}`
+
   // ลองอ่านค่าจาก localStorage ก่อน ถ้าไม่มีใช้ค่าเริ่มต้น
   const [dashboardURL, setDashboardURL] = useState(
-    () => localStorage.getItem('dashboardURL') ||
+    () => localStorage.getItem(storageKey) ||
       'https://grafana.example.com/d/yourUid/yourSlug?orgId=1&from=now-6h&to=now'
   )
 
   useEffect(() => {
-    localStorage.setItem('dashboardURL', dashboardURL)
-  }, [dashboardURL])
+    if (user?.username) {
+      localStorage.setItem(storageKey, dashboardURL)
+    }
+  }, [dashboardURL, storageKey, user?.username])
+
+  const normalizeURL = (url) => {
+    if (!url || url.trim() === '') return ''
+    const trimmedUrl = url.trim()
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+      return `https://${trimmedUrl}`
+    }
+    return trimmedUrl
+  }
 
   return (
     <div style={{ padding: 16 }}>
@@ -34,7 +50,7 @@ export default function Home() {
       }}>
         <iframe
           title="grafana-dashboard"
-          src={dashboardURL}
+          src={normalizeURL(dashboardURL)}
           style={{
             width: '100%',
             height: '100%',

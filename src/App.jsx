@@ -1,20 +1,78 @@
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from './context/AuthContext'
 import Home from './pages/Home.jsx'
 import Settings from './pages/Settings.jsx'
+import Login from './pages/Login.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
 
 export default function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout, isAuthenticated } = useAuth()
+
+  const isLoginPage = location.pathname === '/login'
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <div>
-      {/* nav ง่ายๆ */}
-      <nav style={{ padding: 12, borderBottom: '1px solid #ddd' }}>
-        <Link to="/" style={{ marginRight: 12 }}>Home</Link>
-        <Link to="/settings">Settings</Link>
-      </nav>
+      {/* Show navigation only when not on login page and user is authenticated */}
+      {!isLoginPage && isAuthenticated && (
+        <nav style={{
+          padding: 12,
+          borderBottom: '1px solid #ddd',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <Link to="/" style={{ marginRight: 12 }}>Home</Link>
+            <Link to="/settings">Settings</Link>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: '14px', color: '#666' }}>
+              Welcome, {user?.username}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        </nav>
+      )}
 
-      {/* outlet */}
+      {/* Routes */}
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </div>
   )

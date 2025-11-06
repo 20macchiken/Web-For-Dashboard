@@ -1,13 +1,20 @@
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 export default function Settings() {
+  const { user } = useAuth()
+
+  const storageKey = `dashboardURL_${user?.username}`
+
   const [value, setValue] = useState(
-    localStorage.getItem('dashboardURL') || ''
+    localStorage.getItem(storageKey) || ''
   )
 
   const save = () => {
-    localStorage.setItem('dashboardURL', value)
-    alert('Saved! กลับไปหน้า Home เพื่อดูผล')
+    if (user?.username) {
+      localStorage.setItem(storageKey, value)
+      alert('Saved! กลับไปหน้า Home เพื่อดูผล')
+    }
   }
 
   const reset6h = () => {
