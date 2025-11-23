@@ -11,7 +11,7 @@ export default function Settings() {
   )
 
   const save = () => {
-    if (user?.username) {
+    if (user?.email) {
       localStorage.setItem(storageKey, value)
       alert('Saved! กลับไปหน้า Home เพื่อดูผล')
     }

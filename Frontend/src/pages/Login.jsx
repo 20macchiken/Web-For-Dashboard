@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient"; // use of supabase client for functions
 
 export default function Login() {
   const [mode, setMode] = useState("login"); // "login" | "signup"
@@ -30,6 +31,18 @@ export default function Login() {
     } catch (err) {
       setError(err.message || "Auth failed");
     }
+  };
+
+  // Google OAuth login
+  const loginWithGoogle = async () => {
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin, // redirect back to the app
+      },
+    });
+    if (error) setError(error.message);
   };
 
   return (
@@ -162,6 +175,26 @@ export default function Login() {
             {mode === "login" ? "Login" : "Sign up"}
           </button>
         </form>
+
+        {/* Sign in to Google button */}
+        <button
+          onClick={loginWithGoogle}
+          style={{
+            width: "100%",
+            padding: "12px",
+            marginTop: "10px",
+            backgroundColor: "white",
+            color: "#111",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "16px",
+            fontWeight: "500",
+            cursor: "pointer",
+            boxSizing: "border-box",
+          }}
+        >
+          Continue with Google
+        </button>
 
         <div style={{ marginTop: 12, textAlign: "center" }}>
           {mode === "login" ? (

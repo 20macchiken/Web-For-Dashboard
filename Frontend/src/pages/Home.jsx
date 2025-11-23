@@ -13,10 +13,10 @@ export default function Home() {
   )
 
   useEffect(() => {
-    if (user?.username) {
+    if (user?.email) {
       localStorage.setItem(storageKey, dashboardURL)
     }
-  }, [dashboardURL, storageKey, user?.username])
+  }, [dashboardURL, storageKey, user?.email])
 
   const normalizeURL = (url) => {
     if (!url || url.trim() === '') return ''
