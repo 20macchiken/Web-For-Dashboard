@@ -5,8 +5,8 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);       // Supabase user
-  const [session, setSession] = useState(null); // Supabase session (JWT here)
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState(null); // Supabase session (Which will be saves)
+  const [loading, setLoading] = useState(true); 
 
   useEffect(() => {
     // Initial session (refresh)
