@@ -1,10 +1,65 @@
+// src/pages/Home.jsx
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 export default function Home() {
   const { user } = useAuth()
+
+  // ---------- ROLE PART ----------
+  // Role in Users table: 1 = student, 2 = staff/admin/other
+  const [role, setRole] = useState(null)
+  const [roleError, setRoleError] = useState('')
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+
+    async function fetchRole() {
+      try {
+        setRoleError('')
+
+        const { data, error } = await supabase
+          .from('Users')
+          .select('Role')
+          .eq('id', user.id)
+          .single()
+
+        if (cancelled) return
+
+        if (error) {
+          console.log('Fetch role error:', error)
+
+          // PGRST116 = "No rows in result" -> row not created yet
+          if (error.code === 'PGRST116') {
+            setRole(null)
+            setRoleError('')
+            return
+          }
+
+          // Real error (permissions, etc.)
+          setRoleError('ไม่สามารถโหลดข้อมูลสิทธิ์ผู้ใช้ได้')
+          return
+        }
+
+        setRole(data?.Role ?? null)
+      } catch (err) {
+        if (cancelled) return
+        console.error(err)
+        setRoleError('ไม่สามารถโหลดข้อมูลสิทธิ์ผู้ใช้ได้')
+      }
+    }
+
+    fetchRole()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   // ---------- GRAFANA URL PART ----------
   const storageKey = `dashboardURL_${user?.email}`
@@ -42,13 +97,13 @@ export default function Home() {
   const [createName, setCreateName] = useState('')
   const [creating, setCreating] = useState(false)
 
-  // hard-coded template info for now (you can change later)
+  // Hard-coded template info for now
   const TEMPLATE_VMID = 101
   const DEFAULT_CORES = 2
   const DEFAULT_MEMORY_MB = 2048
   const DEFAULT_STORAGE = 'local'
 
-  // load nodes once
+  // Load nodes once
   useEffect(() => {
     const fetchNodes = async () => {
       try {
@@ -60,7 +115,6 @@ export default function Home() {
         setNodes(data)
 
         if (data.length > 0) {
-          // Proxmox returns { node: "proxmox-node-b", ... }
           const firstNode = data[0].node || data[0].id?.split('/').pop()
           setSelectedNode(firstNode)
           await fetchVms(firstNode)
@@ -164,11 +218,12 @@ export default function Home() {
       const data = await res.json()
       console.log('Create VM response:', data)
 
-      // even if backend timed-out, we refresh, user can also check Proxmox UI
       await fetchVms(selectedNode)
       setCreateName('')
       alert(
-        `ส่งคำสั่งสร้าง VM แล้ว\n\nสถานะจาก backend: ${data.status || 'เช็คใน Proxmox UI'}`
+        `ส่งคำสั่งสร้าง VM แล้ว\n\nสถานะจาก backend: ${
+          data.status || 'เช็คใน Proxmox UI'
+        }`
       )
     } catch (err) {
       console.error(err)
@@ -220,10 +275,26 @@ export default function Home() {
       <hr style={{ margin: '24px 0' }} />
       <h2>VM Management (Proxmox)</h2>
 
+      {roleError && (
+        <div style={{ color: 'red', marginBottom: 8 }}>{roleError}</div>
+      )}
+
       {vmError && (
         <div style={{ color: 'red', marginBottom: 8 }}>
           {vmError}
         </div>
+      )}
+
+      {role === 1 && (
+        <p style={{ marginBottom: 8 }}>
+          บทบาทของคุณ: <b>Student</b> – สามารถสร้าง VM ของตัวเองจาก template
+          ได้
+        </p>
+      )}
+      {role === 2 && (
+        <p style={{ marginBottom: 8 }}>
+          บทบาทของคุณ: <b>Staff/Admin</b>
+        </p>
       )}
 
       <div style={{ marginBottom: 12 }}>
@@ -249,27 +320,29 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Create VM form */}
-      <form
-        onSubmit={handleCreateVm}
-        style={{
-          display: 'flex',
-          gap: 8,
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <input
-          value={createName}
-          onChange={(e) => setCreateName(e.target.value)}
-          placeholder={`ชื่อ VM ใหม่ (template=${TEMPLATE_VMID})`}
-          style={{ padding: 6, minWidth: 240 }}
-        />
-        <button type="submit" disabled={!selectedNode || creating}>
-          {creating ? 'Creating…' : 'Create VM from Template'}
-        </button>
-      </form>
+      {/* Create VM form – only for students */}
+      {role === 1 && (
+        <form
+          onSubmit={handleCreateVm}
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            marginBottom: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <input
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            placeholder={`ชื่อ VM ใหม่ (template=${TEMPLATE_VMID})`}
+            style={{ padding: 6, minWidth: 240 }}
+          />
+          <button type="submit" disabled={!selectedNode || creating}>
+            {creating ? 'Creating…' : 'Create VM from Template'}
+          </button>
+        </form>
+      )}
 
       {/* VM table */}
       {vmLoading ? (
