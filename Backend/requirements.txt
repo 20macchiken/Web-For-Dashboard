@@ -1,4 +1,8 @@
 flask
 flask-cors
-psycopg2-binary
 python-dotenv
+proxmoxer
+requests
+
+# Still thinking to use or not.
+gunicorn
