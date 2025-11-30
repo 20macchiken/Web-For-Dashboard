@@ -3,6 +3,8 @@ flask-cors
 python-dotenv
 proxmoxer
 requests
+supabase>=2.0.0
+pyjwt>=2.8.0
 
 # Still thinking to use or not.
 gunicorn

@@ -4,7 +4,18 @@ import { useAuth } from '../context/AuthContext'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
 export default function Home() {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
+
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    if (!session?.access_token) {
+      throw new Error("No authentication token available")
+    }
+    return {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    }
+  }
 
   // ---------- GRAFANA URL PART ----------
   const storageKey = `dashboardURL_${user?.email}`
@@ -53,8 +64,15 @@ export default function Home() {
     const fetchNodes = async () => {
       try {
         setVmError('')
-        const res = await fetch(`${API_BASE_URL}/api/proxmox/nodes`)
-        if (!res.ok) throw new Error('Failed to load nodes')
+        const res = await fetch(`${API_BASE_URL}/api/proxmox/nodes`, {
+          headers: getAuthHeaders(),
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            throw new Error('Authentication failed - please log in again')
+          }
+          throw new Error('Failed to load nodes')
+        }
         const data = await res.json()
 
         setNodes(data)
@@ -67,26 +85,31 @@ export default function Home() {
         }
       } catch (err) {
         console.error(err)
-        setVmError('ไม่สามารถโหลดข้อมูล Proxmox nodes ได้')
+        setVmError(err.message || 'ไม่สามารถโหลดข้อมูล Proxmox nodes ได้')
       }
     }
 
-    fetchNodes()
-  }, [])
+    if (session) {
+      fetchNodes()
+    }
+  }, [session])
 
   const fetchVms = async (node) => {
     try {
       setVmLoading(true)
       setVmError('')
       const res = await fetch(
-        `${API_BASE_URL}/api/proxmox/vms?node=${encodeURIComponent(node)}`
+        `${API_BASE_URL}/api/proxmox/vms?node=${encodeURIComponent(node)}`,
+        {
+          headers: getAuthHeaders(),
+        }
       )
       if (!res.ok) throw new Error('Failed to load VMs')
       const data = await res.json()
       setVms(data)
     } catch (err) {
       console.error(err)
-      setVmError('โหลดรายการ VM ไม่สำเร็จ')
+      setVmError(err.message || 'โหลดรายการ VM ไม่สำเร็จ')
     } finally {
       setVmLoading(false)
     }
@@ -110,12 +133,13 @@ export default function Home() {
         )}/${vmid}/start`,
         {
           method: 'POST',
+          headers: getAuthHeaders(),
         }
       )
       await fetchVms(selectedNode)
     } catch (err) {
       console.error(err)
-      setVmError('สั่ง start VM ไม่สำเร็จ')
+      setVmError(err.message || 'สั่ง start VM ไม่สำเร็จ')
     }
   }
 
@@ -129,12 +153,13 @@ export default function Home() {
         )}/${vmid}/stop`,
         {
           method: 'POST',
+          headers: getAuthHeaders(),
         }
       )
       await fetchVms(selectedNode)
     } catch (err) {
       console.error(err)
-      setVmError('สั่ง stop VM ไม่สำเร็จ')
+      setVmError(err.message || 'สั่ง stop VM ไม่สำเร็จ')
     }
   }
 
@@ -148,9 +173,7 @@ export default function Home() {
 
       const res = await fetch(`${API_BASE_URL}/api/proxmox/vms/create`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           node: selectedNode,
           template_vmid: TEMPLATE_VMID,
