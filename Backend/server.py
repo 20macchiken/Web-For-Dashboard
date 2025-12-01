@@ -14,6 +14,7 @@ from proxmox_client import (
     get_vm_status,
     start_vm,
     stop_vm,
+    delete_vm,
     create_vm_from_template,
 )
 
@@ -208,6 +209,79 @@ def api_vm_stop(node, vmid):
         print("Error stopping VM:", e)
         return {"error": "Failed to stop VM"}, 500
 
+@app.post("/api/proxmox/vms/<node>/<int:vmid>/delete")
+@require_auth
+def api_vm_delete(node, vmid):
+    """
+    Delete a VM.
+
+    Students (Role=1): may only delete their own VM (Users.Proxmox).
+    Staff/Admin (Role=2): may delete any VM.
+
+    If the VM is still running, we try to stop it first.
+    For students we also clear Users.Proxmox after successful delete.
+    """
+    user = get_current_user()
+    user_id = user["id"] if user else None
+
+    info = get_user_info(user_id) if user_id else {}
+    role = info.get("Role")
+    prox = info.get("Proxmox")
+
+    # ---- Student ownership check ----
+    if role == 1:
+        if not prox:
+            return jsonify({"error": "You do not have a VM assigned"}), 403
+        try:
+            if int(prox) != int(vmid):
+                return jsonify(
+                    {"error": "You are not allowed to delete this VM"}
+                ), 403
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid Proxmox VM assignment"}), 403
+
+    try:
+        # ---- Make sure VM is stopped before delete ----
+        try:
+            status = get_vm_status(node, vmid)
+            if status.get("status") == "running":
+                # hard stop (quick)
+                try:
+                    stop_vm(node, vmid)
+                except Exception as e_stop:
+                    print(f"Warning: failed to stop VM {vmid} before delete: {e_stop}")
+        except Exception as e_status:
+            # If we fail to read status, just log and continue; delete might still work
+            print(f"Warning: failed to read status for VM {vmid}: {e_status}")
+
+        # ---- Delete in Proxmox ----
+        result = delete_vm(node, vmid)
+
+        # ---- Clear student's Proxmox mapping if needed ----
+        if role == 1 and user_id:
+            try:
+                set_user_proxmox(user_id, None)
+            except Exception as e_set:
+                print("Failed to clear Proxmox VMID for user:", e_set)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "message": f"VM {vmid} deleted on node {node}",
+                "result": result,
+            }
+        )
+    except Exception as e:
+        # Return the actual error text so you can see it in the browser
+        print(f"Error deleting VM {vmid} on node {node}:", e)
+        return (
+            jsonify(
+                {
+                    "error": f"Delete failed: {str(e)}",
+                }
+            ),
+            500,
+        )
 
 @app.post("/api/proxmox/vms/create")
 @require_auth

@@ -65,9 +65,34 @@ def start_vm(node: str, vmid: int):
     return proxmox.nodes(node).qemu(vmid).status.start.post()
 
 
-def stop_vm(node: str, vmid: int):
-    proxmox = get_proxmox()
-    return proxmox.nodes(node).qemu(vmid).status.shutdown.post()
+def stop_vm(node: str, vmid: int, force: bool = True):
+    """
+    Stop a VM on Proxmox.
+
+    By default we use a *hard stop* (power off) so it does not wait
+    for the guest OS to shutdown gracefully.
+
+    If you ever want a slow graceful shutdown instead, call with: force=False
+    """
+    proxmox = get_proxmox_client()
+
+    if force:
+        # Hard power-off, returns immediately and does not wait for guest
+        return proxmox.nodes(node).qemu(vmid).status().stop.post()
+    else:
+        # Graceful shutdown (can timeout if guest doesn't respond)
+        return proxmox.nodes(node).qemu(vmid).status().shutdown.post()
+    
+def delete_vm(node: str, vmid: int):
+    """
+    Permanently delete a VM from Proxmox.
+    """
+    proxmox = get_proxmox()     # <<< same helper as list_nodes / start_vm / stop_vm
+    return proxmox.nodes(node).qemu(vmid).delete()
+
+
+
+
 
 
 def create_vm_from_template(

@@ -224,6 +224,59 @@ export default function Home() {
     }
   }
 
+  const handleDelete = async (vmid) => {
+    if (!selectedNode) return
+
+    if (
+      !window.confirm(
+        'คุณแน่ใจหรือไม่ว่าจะลบ VM นี้? การลบนี้ไม่สามารถย้อนกลับได้.'
+      )
+    ) {
+      return
+    }
+
+    try {
+      setVmError('')
+
+      const res = await fetch(
+        `${API_BASE_URL}/api/proxmox/vms/${encodeURIComponent(
+          selectedNode
+        )}/${vmid}/delete`,
+        {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        }
+      )
+
+      let data = {}
+      try {
+        data = await res.json()
+      } catch (_) {
+        // ignore if no JSON body
+      }
+
+      if (!res.ok) {
+        const message = data?.error || 'ลบ VM ไม่สำเร็จ'
+        throw new Error(message)
+      }
+
+      console.log('Delete VM response:', data)
+
+      // If it was this student's own VM, clear local mapping
+      if (
+        userProxmoxVmid != null &&
+        String(vmid) === String(userProxmoxVmid)
+      ) {
+        setUserProxmoxVmid(null)
+      }
+
+      await fetchVms(selectedNode)
+    } catch (err) {
+      console.error(err)
+      setVmError(err.message || 'ลบ VM ไม่สำเร็จ')
+    }
+  }
+
   const handleCreateVm = async (e) => {
     e.preventDefault()
     if (!selectedNode || !createName.trim()) return
@@ -438,9 +491,9 @@ export default function Home() {
               </th>
             </tr>
           </thead>
-          
+
           <tbody>
-            {/* First: templates/other VMs */}
+            {/* 1) Templates / other VMs */}
             {otherVms.map((vm) => {
               const isOwner =
                 userProxmoxVmid != null &&
@@ -454,7 +507,6 @@ export default function Home() {
                   <td>{vm.type}</td>
                   <td>
                     {isStaff ? (
-                      // Staff/Admin: control all VMs
                       <>
                         <button
                           onClick={() => handleStart(vm.vmid)}
@@ -462,12 +514,15 @@ export default function Home() {
                         >
                           Start
                         </button>
-                        <button onClick={() => handleStop(vm.vmid)}>
+                        <button
+                          onClick={() => handleStop(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
                           Stop
                         </button>
+                        <button onClick={() => handleDelete(vm.vmid)}>Delete</button>
                       </>
                     ) : isOwner ? (
-                      // Student AND (somehow) this VM equals their Proxmox VM
                       <>
                         <button
                           onClick={() => handleStart(vm.vmid)}
@@ -475,12 +530,15 @@ export default function Home() {
                         >
                           Start
                         </button>
-                        <button onClick={() => handleStop(vm.vmid)}>
+                        <button
+                          onClick={() => handleStop(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
                           Stop
                         </button>
+                        <button onClick={() => handleDelete(vm.vmid)}>Delete</button>
                       </>
                     ) : (
-                      // Student, not their VM -> read-only
                       <span
                         style={{
                           color: '#888',
@@ -496,7 +554,7 @@ export default function Home() {
               )
             })}
 
-            {/* Separator before student's own VM(s) (students only) */}
+            {/* 2) Separator before student's own VM(s) */}
             {!isStaff && ownedVms.length > 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: '8px 0' }}>
@@ -521,7 +579,7 @@ export default function Home() {
               </tr>
             )}
 
-            {/* Then: student's own VM(s) */}
+            {/* 3) Student’s own VM(s) */}
             {ownedVms.map((vm) => {
               const isOwner =
                 userProxmoxVmid != null &&
@@ -542,9 +600,13 @@ export default function Home() {
                         >
                           Start
                         </button>
-                        <button onClick={() => handleStop(vm.vmid)}>
+                        <button
+                          onClick={() => handleStop(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
                           Stop
                         </button>
+                        <button onClick={() => handleDelete(vm.vmid)}>Delete</button>
                       </>
                     ) : isOwner ? (
                       <>
@@ -554,9 +616,13 @@ export default function Home() {
                         >
                           Start
                         </button>
-                        <button onClick={() => handleStop(vm.vmid)}>
+                        <button
+                          onClick={() => handleStop(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
                           Stop
                         </button>
+                        <button onClick={() => handleDelete(vm.vmid)}>Delete</button>
                       </>
                     ) : (
                       <span
