@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import Home from './pages/Home.jsx'
 import Settings from './pages/Settings.jsx'
@@ -10,7 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx'
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout, isAuthenticated } = useAuth()
+  const { user, logout, isAuthenticated, isStaff } = useAuth()
 
   const isLoginPage = location.pathname === '/login'
 
@@ -32,8 +32,17 @@ export default function App() {
         }}>
           <div>
             <Link to="/" style={{ marginRight: 12 }}>Home</Link>
-            <Link to="/alerts" style={{ marginRight: 12 }}>Alerts</Link>
-            <Link to="/logs" style={{ marginRight: 12 }}>Logs</Link>
+
+            {isStaff && (
+              <>
+                <Link to="/alerts" style={{ marginRight: 12 }}>
+                  Alerts
+                </Link>
+                <Link to="/logs" style={{ marginRight: 12 }}>
+                  Logs
+                </Link>
+              </>
+            )}
             <Link to="/settings">Settings</Link>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -69,11 +78,12 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/alerts"
           element={
             <ProtectedRoute>
-              <Alerts />
+              {isStaff ? <Alerts /> : <Navigate to="/" replace />}
             </ProtectedRoute>
           }
         />
@@ -89,7 +99,7 @@ export default function App() {
           path="/logs"
           element={
             <ProtectedRoute>
-              <Logs />
+              {isStaff ? <Logs /> : <Navigate to="/" replace />}
             </ProtectedRoute>
           }
         />

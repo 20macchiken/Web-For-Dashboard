@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
     if (!authUser) return;
 
     // Logic: @siit.tu.ac.th = Student (1), Others = Staff (2)
-    const isStudent = authUser.email.endsWith("@siit.tu.ac.th");
+    const isStudent = authUser.email.endsWith("@g.siit.tu.ac.th");
     const roleId = isStudent ? 1 : 2;
 
     const { error } = await supabase
