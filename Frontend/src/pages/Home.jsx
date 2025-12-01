@@ -229,7 +229,7 @@ export default function Home() {
 
     if (
       !window.confirm(
-        'คุณแน่ใจหรือไม่ว่าจะลบ VM นี้? การลบนี้ไม่สามารถย้อนกลับได้.'
+        'Are you sure you want to DELETE this VM? This action cannot be undone.'
       )
     ) {
       return
@@ -407,7 +407,7 @@ export default function Home() {
       <h2>VM Management (Proxmox)</h2>
 
       <p style={{ color: '#555' }}>
-        บทบาทของคุณ: {isStaff ? 'Staff / Admin' : 'Student'}
+        บทบาทของคุณ || Your Role: {isStaff ? 'Staff / Admin' : 'Student'}
       </p>
 
       {/* Node selection */}
