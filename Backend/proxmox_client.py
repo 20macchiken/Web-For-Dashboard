@@ -1,9 +1,6 @@
 import os
 import requests
-import logging
 from proxmoxer import ProxmoxAPI
-
-logger = logging.getLogger(__name__)
 
 
 def _str_to_bool(value: str) -> bool:
@@ -52,7 +49,7 @@ def list_vms(node: str):
     resources = proxmox.cluster.resources.get(type="vm")  # qemu + lxc
 
     # Debug log so you can see what Proxmox returns in the server console
-    logger.debug(f"Proxmox cluster resources (type='vm'): {len(resources)} VMs found")
+    print("cluster.resources(type='vm') =", resources)
 
     # Filter by node name
     return [vm for vm in resources if vm.get("node") == node]
@@ -107,7 +104,7 @@ def create_vm_from_template(
         )
     except requests.exceptions.ReadTimeout as e:
         # Proxmox is slow to answer; clone may still be running on the node
-        logger.warning(f"Clone request timed out for VMID {vmid}, task may still be running: {e}")
+        print(f"Clone request timed out for VMID {vmid}, task may still be running:", e)
         upid = None
 
     # 3) Try to configure CPU + RAM, but don't fail the whole request
@@ -117,6 +114,6 @@ def create_vm_from_template(
             memory=memory,
         )
     except Exception as e:
-        logger.warning(f"Failed to set config for VM {vmid}: {e}")
+        print(f"Warning: failed to set config for VM {vmid}:", e)
 
     return vmid, upid
