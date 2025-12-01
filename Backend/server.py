@@ -4,6 +4,9 @@ from flask_cors import CORS
 import time
 import logging
 import atexit
+import os  # NEW
+
+from supabase import create_client, Client  # NEW
 
 from proxmox_client import (
     list_nodes,
@@ -22,6 +25,48 @@ from alert_engine import start_alert_engine, stop_alert_engine
 load_dotenv()
 
 logger = setup_logging()
+
+# ------- SUPABASE HELPERS (Users.Role, Users.Proxmox) -------
+
+_supabase_client: Client | None = None
+
+
+def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client is None:
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            raise RuntimeError(
+                "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"
+            )
+        _supabase_client = create_client(url, key)
+    return _supabase_client
+
+
+def get_user_info(user_id: str) -> dict:
+    """
+    Returns e.g. {"Role": 1 or 2, "Proxmox": "101"} or {} if not found.
+    """
+    supabase = get_supabase()
+    res = (
+        supabase.table("Users")
+        .select("Role, Proxmox")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    return res.data or {}
+
+
+def set_user_proxmox(user_id: str, vmid: int | None) -> None:
+    """
+    Update Users.Proxmox for this user (string VMID or NULL).
+    """
+    supabase = get_supabase()
+    value = str(vmid) if vmid is not None else None
+    supabase.table("Users").update({"Proxmox": value}).eq("id", user_id).execute()
+
 
 # ------- FLASK APP & ROUTES -------
 
@@ -94,10 +139,33 @@ def api_vm_status(node, vmid):
 
 
 @app.post("/api/proxmox/vms/<node>/<int:vmid>/start")
+@require_auth
 def api_vm_start(node, vmid):
     """
     Start a VM.
+
+    Students (Role=1): may only start their own VM, defined by Users.Proxmox.
+    Staff/Admin (Role=2): can start any VM.
     """
+    user = get_current_user()
+    user_id = user["id"] if user else None
+
+    info = get_user_info(user_id) if user_id else {}
+    role = info.get("Role")
+    prox = info.get("Proxmox")
+
+    if role == 1:
+        # Student: enforce ownership
+        if not prox:
+            return jsonify({"error": "You do not have a VM assigned"}), 403
+        try:
+            if int(prox) != int(vmid):
+                return jsonify(
+                    {"error": "You are not allowed to control this VM"}
+                ), 403
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid Proxmox VM assignment"}), 403
+
     try:
         upid = start_vm(node, vmid)
         return jsonify({"upid": upid})
@@ -107,10 +175,32 @@ def api_vm_start(node, vmid):
 
 
 @app.post("/api/proxmox/vms/<node>/<int:vmid>/stop")
+@require_auth
 def api_vm_stop(node, vmid):
     """
     Stop (shutdown) a VM.
+
+    Students (Role=1): may only stop their own VM.
+    Staff/Admin: no restriction.
     """
+    user = get_current_user()
+    user_id = user["id"] if user else None
+
+    info = get_user_info(user_id) if user_id else {}
+    role = info.get("Role")
+    prox = info.get("Proxmox")
+
+    if role == 1:
+        if not prox:
+            return jsonify({"error": "You do not have a VM assigned"}), 403
+        try:
+            if int(prox) != int(vmid):
+                return jsonify(
+                    {"error": "You are not allowed to control this VM"}
+                ), 403
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid Proxmox VM assignment"}), 403
+
     try:
         upid = stop_vm(node, vmid)
         return jsonify({"upid": upid})
@@ -120,9 +210,13 @@ def api_vm_stop(node, vmid):
 
 
 @app.post("/api/proxmox/vms/create")
+@require_auth
 def api_vm_create():
     """
     Create a new VM by cloning a template/base VM.
+
+    Students (Role=1): can only have one VM in total (tracked in Users.Proxmox).
+    Staff/Admin (Role=2): no limit.
 
     Expected JSON body:
     {
@@ -135,6 +229,25 @@ def api_vm_create():
     }
     """
     data = request.get_json() or {}
+
+    # ---- Role & existing VM check ----
+    user = get_current_user()
+    user_id = user["id"] if user else None
+
+    info = get_user_info(user_id) if user_id else {}
+    role = info.get("Role")
+    prox = info.get("Proxmox")
+
+    # 1 VM per student
+    if role == 1 and prox not in (None, "", "null"):
+        return (
+            jsonify(
+                {
+                    "error": "You already have a VM assigned. Please contact staff if you need more.",
+                }
+            ),
+            403,
+        )
 
     node = data.get("node")
     template_vmid = data.get("template_vmid")
@@ -167,6 +280,13 @@ def api_vm_create():
             memory=memory,
             storage=storage,
         )
+
+        # If this is a student, remember their VMID in Users.Proxmox
+        if role == 1 and user_id:
+            try:
+                set_user_proxmox(user_id, vmid)
+            except Exception as e_set:
+                print("Failed to update Proxmox for user:", e_set)
 
         return jsonify({
             "vmid": vmid,
