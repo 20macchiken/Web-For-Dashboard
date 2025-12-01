@@ -280,6 +280,22 @@ export default function Home() {
     }
   }
 
+    // Group VMs: ones owned by this user vs others (templates/other instances)
+  const ownedVms = vms.filter(
+    (vm) =>
+      userProxmoxVmid != null &&
+      String(vm.vmid) === String(userProxmoxVmid)
+  )
+
+  const otherVms = vms.filter(
+    (vm) =>
+      !(
+        userProxmoxVmid != null &&
+        String(vm.vmid) === String(userProxmoxVmid)
+      )
+  )
+
+
   // ---------- RENDER ----------
   return (
     <div style={{ padding: 16 }}>
@@ -422,8 +438,10 @@ export default function Home() {
               </th>
             </tr>
           </thead>
+          
           <tbody>
-            {vms.map((vm) => {
+            {/* First: templates/other VMs */}
+            {otherVms.map((vm) => {
               const isOwner =
                 userProxmoxVmid != null &&
                 String(vm.vmid) === String(userProxmoxVmid)
@@ -435,9 +453,87 @@ export default function Home() {
                   <td>{vm.status}</td>
                   <td>{vm.type}</td>
                   <td>
-                    {/* Buttons:
-                        - Staff/Admin: control all VMs
-                        - Student: only their own VM (matched by Users.Proxmox) */}
+                    {isStaff ? (
+                      // Staff/Admin: control all VMs
+                      <>
+                        <button
+                          onClick={() => handleStart(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
+                          Start
+                        </button>
+                        <button onClick={() => handleStop(vm.vmid)}>
+                          Stop
+                        </button>
+                      </>
+                    ) : isOwner ? (
+                      // Student AND (somehow) this VM equals their Proxmox VM
+                      <>
+                        <button
+                          onClick={() => handleStart(vm.vmid)}
+                          style={{ marginRight: 4 }}
+                        >
+                          Start
+                        </button>
+                        <button onClick={() => handleStop(vm.vmid)}>
+                          Stop
+                        </button>
+                      </>
+                    ) : (
+                      // Student, not their VM -> read-only
+                      <span
+                        style={{
+                          color: '#888',
+                          fontSize: '12px',
+                          fontStyle: 'italic',
+                        }}
+                      >
+                        Read Only
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+
+            {/* Separator before student's own VM(s) (students only) */}
+            {!isStaff && ownedVms.length > 0 && (
+              <tr>
+                <td colSpan={5} style={{ padding: '8px 0' }}>
+                  <hr
+                    style={{
+                      border: 'none',
+                      borderTop: '1px dashed #666',
+                      margin: '8px 0',
+                    }}
+                  />
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      fontSize: 12,
+                      color: '#ccc',
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Your VM
+                  </div>
+                </td>
+              </tr>
+            )}
+
+            {/* Then: student's own VM(s) */}
+            {ownedVms.map((vm) => {
+              const isOwner =
+                userProxmoxVmid != null &&
+                String(vm.vmid) === String(userProxmoxVmid)
+
+              return (
+                <tr key={vm.vmid}>
+                  <td style={{ padding: '4px 0' }}>{vm.vmid}</td>
+                  <td>{vm.name}</td>
+                  <td>{vm.status}</td>
+                  <td>{vm.type}</td>
+                  <td>
                     {isStaff ? (
                       <>
                         <button
@@ -446,7 +542,7 @@ export default function Home() {
                         >
                           Start
                         </button>
-                          <button onClick={() => handleStop(vm.vmid)}>
+                        <button onClick={() => handleStop(vm.vmid)}>
                           Stop
                         </button>
                       </>
