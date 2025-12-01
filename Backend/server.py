@@ -1,6 +1,9 @@
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import time
+import logging
+import atexit
 
 from proxmox_client import (
     list_nodes,
@@ -11,13 +14,30 @@ from proxmox_client import (
     create_vm_from_template,
 )
 
-# ------- ENV -------
+from auth import require_auth, get_current_user
+from logging_config import setup_logging, log_api_request
+from alerts_api import alerts_bp
+from alert_engine import start_alert_engine, stop_alert_engine
+
 load_dotenv()
 
 # ------- FLASK APP & ROUTES -------
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})  # dev only
+
+# Register alerts blueprint
+app.register_blueprint(alerts_bp)
+
+# Start alert engine on startup
+try:
+    start_alert_engine()
+    logger.info("Alert engine started successfully")
+except Exception as e:
+    logger.error(f"Failed to start alert engine: {str(e)}")
+
+# Register shutdown handler
+atexit.register(stop_alert_engine)
 
 
 @app.get("/api/health")

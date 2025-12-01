@@ -3,6 +3,10 @@ flask-cors
 python-dotenv
 proxmoxer
 requests
+supabase>=2.0.0
+pyjwt>=2.8.0
+influxdb-client>=1.36.0
+apscheduler>=3.10.0
 
 # Still thinking to use or not.
 gunicorn
