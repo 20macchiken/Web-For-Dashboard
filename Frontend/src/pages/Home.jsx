@@ -1,21 +1,153 @@
+// src/pages/Home.jsx
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+
+// Role IDs in your DB: 1 = student, 2 = staff/admin
+const ROLE_STUDENT = 1
+const ROLE_STAFF = 2
 
 export default function Home() {
-  const { user, session } = useAuth()
+  const { user } = useAuth()
 
-  // Helper function to get auth headers
-  const getAuthHeaders = () => {
-    if (!session?.access_token) {
-      throw new Error("No authentication token available")
+  // ---------- ROLE PART ----------
+  const [role, setRole] = useState(null)
+  const [roleError, setRoleError] = useState('')
+  const [roleLoading, setRoleLoading] = useState(false)
+
+  useEffect(() => {
+    // no logged-in user yet
+    if (!user?.id) return
+
+    let cancelled = false
+
+    async function ensureUserAndRole() {
+      try {
+        setRoleLoading(true)
+        setRoleError('')
+
+        // 1) Try to read existing Role from Users
+        const { data, error } = await supabase
+          .from('Users')
+          .select('Role')
+          .eq('id', user.id)
+          .maybeSingle() // <-- no 406 when there are 0 rows
+
+        if (cancelled) return
+
+        if (error) {
+          console.error('Fetch role error:', error)
+          setRole(null)
+          setRoleError('ไม่สามารถโหลดข้อมูลสิทธิ์ผู้ใช้ได้')
+          return
+        }
+
+        // If row exists and has a role, use it and stop here
+        if (data && data.Role != null) {
+          setRole(data.Role)
+          return
+        }
+
+        // 2) No row yet -> create Users + Student/Faculty Member
+        const emailRaw = user.email || ''
+        const email = emailRaw.toLowerCase()
+        const [idPart, domainPart] = email.split('@')
+
+        let computedRoleId
+        let studentId = null
+        let staffId = null
+
+        if (domainPart === 'g.siit.tu.ac.th') {
+          // SIIT student email
+          computedRoleId = ROLE_STUDENT
+          studentId = idPart // e.g. 652277xxxx from 652277xxxx@g.siit.tu.ac.th
+        } else {
+          // Everything else is staff/admin
+          computedRoleId = ROLE_STAFF
+          staffId = idPart
+        }
+
+        const fullName =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          emailRaw
+
+        // ---- Upsert into Users ----
+        const { data: upsertUser, error: upsertErr } = await supabase
+          .from('Users')
+          .upsert(
+            {
+              id: user.id,
+              Email: email,
+              Name: fullName,
+              Role: computedRoleId,
+            },
+            { onConflict: 'id' }
+          )
+          .select('Role')
+          .single()
+
+        if (cancelled) return
+
+        if (upsertErr) {
+          console.error('Upsert Users error:', upsertErr)
+          setRole(null)
+          setRoleError('ไม่สามารถบันทึกข้อมูลผู้ใช้ได้')
+          return
+        }
+
+        const finalRole = upsertUser?.Role ?? computedRoleId
+        setRole(finalRole)
+
+        // ---- Upsert into Student / Faculty Member ----
+        if (finalRole === ROLE_STUDENT) {
+          const { error: stErr } = await supabase
+            .from('Student')
+            .upsert(
+              {
+                u_id: user.id,
+                role_id: finalRole,
+                StudentID: studentId,
+              },
+              { onConflict: 'u_id' }
+            )
+          if (stErr) {
+            console.error('Upsert Student error:', stErr)
+          }
+        } else if (finalRole === ROLE_STAFF) {
+          const { error: facErr } = await supabase
+            .from('Faculty Member')
+            .upsert(
+              {
+                U_id: user.id,
+                role_id: finalRole,
+                staff_id: staffId,
+              },
+              { onConflict: 'U_id' }
+            )
+          if (facErr) {
+            console.error('Upsert Faculty Member error:', facErr)
+          }
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.error('ensureUserAndRole error:', err)
+        setRole(null)
+        setRoleError('ไม่สามารถโหลดข้อมูลสิทธิ์ผู้ใช้ได้')
+      } finally {
+        if (!cancelled) setRoleLoading(false)
+      }
     }
-    return {
-      "Authorization": `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
+
+    ensureUserAndRole()
+
+    return () => {
+      cancelled = true
     }
-  }
+  }, [user?.id])
 
   // ---------- GRAFANA URL PART ----------
   const storageKey = `dashboardURL_${user?.email}`
@@ -53,63 +185,50 @@ export default function Home() {
   const [createName, setCreateName] = useState('')
   const [creating, setCreating] = useState(false)
 
-  // hard-coded template info for now (you can change later)
+  // Hard-coded template info for now
   const TEMPLATE_VMID = 101
   const DEFAULT_CORES = 2
   const DEFAULT_MEMORY_MB = 2048
   const DEFAULT_STORAGE = 'local'
 
-  // load nodes once
+  // Load nodes once
   useEffect(() => {
     const fetchNodes = async () => {
       try {
         setVmError('')
-        const res = await fetch(`${API_BASE_URL}/api/proxmox/nodes`, {
-          headers: getAuthHeaders(),
-        })
-        if (!res.ok) {
-          if (res.status === 401) {
-            throw new Error('Authentication failed - please log in again')
-          }
-          throw new Error('Failed to load nodes')
-        }
+        const res = await fetch(`${API_BASE_URL}/api/proxmox/nodes`)
+        if (!res.ok) throw new Error('Failed to load nodes')
         const data = await res.json()
 
         setNodes(data)
 
         if (data.length > 0) {
-          // Proxmox returns { node: "proxmox-node-b", ... }
           const firstNode = data[0].node || data[0].id?.split('/').pop()
           setSelectedNode(firstNode)
           await fetchVms(firstNode)
         }
       } catch (err) {
         console.error(err)
-        setVmError(err.message || 'ไม่สามารถโหลดข้อมูล Proxmox nodes ได้')
+        setVmError('ไม่สามารถโหลดข้อมูล Proxmox nodes ได้')
       }
     }
 
-    if (session) {
-      fetchNodes()
-    }
-  }, [session])
+    fetchNodes()
+  }, [])
 
   const fetchVms = async (node) => {
     try {
       setVmLoading(true)
       setVmError('')
       const res = await fetch(
-        `${API_BASE_URL}/api/proxmox/vms?node=${encodeURIComponent(node)}`,
-        {
-          headers: getAuthHeaders(),
-        }
+        `${API_BASE_URL}/api/proxmox/vms?node=${encodeURIComponent(node)}`
       )
       if (!res.ok) throw new Error('Failed to load VMs')
       const data = await res.json()
       setVms(data)
     } catch (err) {
       console.error(err)
-      setVmError(err.message || 'โหลดรายการ VM ไม่สำเร็จ')
+      setVmError('โหลดรายการ VM ไม่สำเร็จ')
     } finally {
       setVmLoading(false)
     }
@@ -133,13 +252,12 @@ export default function Home() {
         )}/${vmid}/start`,
         {
           method: 'POST',
-          headers: getAuthHeaders(),
         }
       )
       await fetchVms(selectedNode)
     } catch (err) {
       console.error(err)
-      setVmError(err.message || 'สั่ง start VM ไม่สำเร็จ')
+      setVmError('สั่ง start VM ไม่สำเร็จ')
     }
   }
 
@@ -153,13 +271,12 @@ export default function Home() {
         )}/${vmid}/stop`,
         {
           method: 'POST',
-          headers: getAuthHeaders(),
         }
       )
       await fetchVms(selectedNode)
     } catch (err) {
       console.error(err)
-      setVmError(err.message || 'สั่ง stop VM ไม่สำเร็จ')
+      setVmError('สั่ง stop VM ไม่สำเร็จ')
     }
   }
 
@@ -173,7 +290,9 @@ export default function Home() {
 
       const res = await fetch(`${API_BASE_URL}/api/proxmox/vms/create`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           node: selectedNode,
           template_vmid: TEMPLATE_VMID,
@@ -187,11 +306,12 @@ export default function Home() {
       const data = await res.json()
       console.log('Create VM response:', data)
 
-      // even if backend timed-out, we refresh, user can also check Proxmox UI
       await fetchVms(selectedNode)
       setCreateName('')
       alert(
-        `ส่งคำสั่งสร้าง VM แล้ว\n\nสถานะจาก backend: ${data.status || 'เช็คใน Proxmox UI'}`
+        `ส่งคำสั่งสร้าง VM แล้ว\n\nสถานะจาก backend: ${
+          data.status || 'เช็คใน Proxmox UI'
+        }`
       )
     } catch (err) {
       console.error(err)
@@ -243,10 +363,25 @@ export default function Home() {
       <hr style={{ margin: '24px 0' }} />
       <h2>VM Management (Proxmox)</h2>
 
+      {roleLoading && <p>กำลังโหลดข้อมูลสิทธิ์ผู้ใช้...</p>}
+
+      {roleError && (
+        <div style={{ color: 'red', marginBottom: 8 }}>{roleError}</div>
+      )}
+
       {vmError && (
-        <div style={{ color: 'red', marginBottom: 8 }}>
-          {vmError}
-        </div>
+        <div style={{ color: 'red', marginBottom: 8 }}>{vmError}</div>
+      )}
+
+      {role === ROLE_STUDENT && (
+        <p style={{ marginBottom: 8 }}>
+          บทบาทของคุณ: <b>Student</b> – สามารถสร้าง VM ของตัวเองจาก template ได้
+        </p>
+      )}
+      {role === ROLE_STAFF && (
+        <p style={{ marginBottom: 8 }}>
+          บทบาทของคุณ: <b>Staff/Admin</b>
+        </p>
       )}
 
       <div style={{ marginBottom: 12 }}>
@@ -272,27 +407,29 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Create VM form */}
-      <form
-        onSubmit={handleCreateVm}
-        style={{
-          display: 'flex',
-          gap: 8,
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <input
-          value={createName}
-          onChange={(e) => setCreateName(e.target.value)}
-          placeholder={`ชื่อ VM ใหม่ (template=${TEMPLATE_VMID})`}
-          style={{ padding: 6, minWidth: 240 }}
-        />
-        <button type="submit" disabled={!selectedNode || creating}>
-          {creating ? 'Creating…' : 'Create VM from Template'}
-        </button>
-      </form>
+      {/* Create VM form – only for students */}
+      {role === ROLE_STUDENT && (
+        <form
+          onSubmit={handleCreateVm}
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            marginBottom: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <input
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            placeholder={`ชื่อ VM ใหม่ (template=${TEMPLATE_VMID})`}
+            style={{ padding: 6, minWidth: 240 }}
+          />
+          <button type="submit" disabled={!selectedNode || creating}>
+            {creating ? 'Creating…' : 'Create VM from Template'}
+          </button>
+        </form>
+      )}
 
       {/* VM table */}
       {vmLoading ? (
