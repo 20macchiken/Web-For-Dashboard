@@ -21,6 +21,8 @@ from alert_engine import start_alert_engine, stop_alert_engine
 
 load_dotenv()
 
+logger = setup_logging()
+
 # ------- FLASK APP & ROUTES -------
 
 app = Flask(__name__)
