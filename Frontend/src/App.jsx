@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext.jsx'
 import Home from './pages/Home.jsx'
 import Settings from './pages/Settings.jsx'
 import Logs from './pages/Logs.jsx'
+import Alerts from './pages/Alerts.jsx'
 import Login from './pages/Login.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 
@@ -31,6 +32,7 @@ export default function App() {
         }}>
           <div>
             <Link to="/" style={{ marginRight: 12 }}>Home</Link>
+            <Link to="/alerts" style={{ marginRight: 12 }}>Alerts</Link>
             <Link to="/logs" style={{ marginRight: 12 }}>Logs</Link>
             <Link to="/settings">Settings</Link>
           </div>
@@ -64,6 +66,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/alerts"
+          element={
+            <ProtectedRoute>
+              <Alerts />
             </ProtectedRoute>
           }
         />
