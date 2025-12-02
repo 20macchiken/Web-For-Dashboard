@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
@@ -20,6 +21,15 @@ export default function Logs() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const PAGE_SIZE = 50
+
+  // Unified export state
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportStartDate, setExportStartDate] = useState('')
+  const [exportEndDate, setExportEndDate] = useState('')
+
+  const { session } = useAuth()
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
   // Fetch logs from Supabase
   const fetchLogs = async (reset = false) => {
@@ -116,6 +126,18 @@ export default function Logs() {
     }
   }, [filters])
 
+  // Click-outside handler for export menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('[data-export-menu]')) {
+        setShowExportMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showExportMenu])
+
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }))
   }
@@ -123,6 +145,116 @@ export default function Logs() {
   const handleLoadMore = () => {
     setPage(prev => prev + 1)
     fetchLogs(false)
+  }
+
+  const handleUnifiedExport = async (exportType) => {
+    try {
+      setExporting(true)
+      setShowExportMenu(false)
+      setError('')
+
+      // Determine what to include based on export type
+      let includeInfra = false
+      let includeMetrics = false
+      let format = 'json'
+      let multiFormat = false
+
+      // Parse export type: "metrics-csv", "metrics-json", "metrics-lineprotocol", "combined-csv-inline", "combined-json-inline"
+      if (exportType.startsWith('metrics-')) {
+        includeMetrics = true
+        format = exportType.replace('metrics-', '')
+      } else if (exportType === 'combined-csv-inline') {
+        includeMetrics = true
+        format = 'csv'
+        multiFormat = true
+      } else if (exportType === 'combined-json-inline') {
+        includeMetrics = true
+        format = 'json'
+        multiFormat = true
+      }
+
+      // Validate date range if metrics are included
+      if (includeMetrics && (!exportStartDate || !exportEndDate)) {
+        setError('Please select both start and end dates for metrics export')
+        setExporting(false)
+        return
+      }
+
+      if (includeMetrics) {
+        const startDate = new Date(exportStartDate)
+        const endDate = new Date(exportEndDate)
+        if (startDate >= endDate) {
+          setError('Start date must be before end date')
+          setExporting(false)
+          return
+        }
+      }
+
+      // Get auth token
+      const token = session?.access_token
+      if (!token) {
+        throw new Error('No authentication token available')
+      }
+
+      // Build URL
+      let url = `${API_BASE_URL}/api/export/unified?format=${format}&include_infrastructure=${includeInfra}&include_metrics=${includeMetrics}&multi_format=${multiFormat}`
+
+      if (includeMetrics) {
+        const startISO = new Date(exportStartDate).toISOString()
+        const endISO = new Date(exportEndDate).toISOString()
+        url += `&start_time=${encodeURIComponent(startISO)}&end_time=${encodeURIComponent(endISO)}`
+      }
+
+      // Fetch export data
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed - please log in again')
+        }
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Export failed with status ${response.status}`)
+      }
+
+      // Get filename from Content-Disposition header or generate one
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let fileExt = format === 'lineprotocol' ? 'txt' : format
+      if (multiFormat) {
+        fileExt = 'zip'
+      }
+      let filename = `export_${new Date().toISOString().replace(/[:.]/g, '-')}.${fileExt}`
+
+      if (contentDisposition) {
+        const matches = contentDisposition.match(/filename="?([^"]+)"?/)
+        if (matches && matches[1]) {
+          filename = matches[1]
+        }
+      }
+
+      // Convert response to blob and trigger download
+      const blob = await response.blob()
+      const url2 = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url2
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+
+      // Cleanup
+      window.URL.revokeObjectURL(url2)
+      document.body.removeChild(a)
+
+    } catch (err) {
+      console.error('Export error:', err)
+      setError(err.message || 'Failed to export data')
+    } finally {
+      setExporting(false)
+    }
   }
 
   const formatTimestamp = (timestamp) => {
@@ -151,6 +283,21 @@ export default function Logs() {
         return '#000'
     }
   }
+
+  // Style helpers for unified export menu
+  const menuItemStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    border: 'none',
+    background: 'none',
+    textAlign: 'left',
+    cursor: 'pointer',
+    fontSize: 13,
+    borderBottom: '1px solid #dee2e6'
+  }
+
+  const handleMouseEnter = (e) => e.target.style.backgroundColor = '#f8f9fa'
+  const handleMouseLeave = (e) => e.target.style.backgroundColor = 'transparent'
 
   return (
     <div style={{ padding: 16 }}>
@@ -275,6 +422,81 @@ export default function Logs() {
           >
             Clear Filters
           </button>
+        </div>
+
+        {/* Unified Export Section */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }} data-export-menu>
+          {/* Date pickers - always visible */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+                Start Date (for metrics):
+              </label>
+              <input
+                type="datetime-local"
+                value={exportStartDate}
+                onChange={(e) => setExportStartDate(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 12 }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+                End Date (for metrics):
+              </label>
+              <input
+                type="datetime-local"
+                value={exportEndDate}
+                onChange={(e) => setExportEndDate(e.target.value)}
+                style={{ padding: '4px 8px', fontSize: 12 }}
+              />
+            </div>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              disabled={exporting}
+              style={{
+                padding: '4px 12px',
+                backgroundColor: exporting ? '#6c757d' : '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {exporting ? 'Exporting...' : 'Export Data'}
+              <span style={{ fontSize: 10 }}>▼</span>
+            </button>
+          </div>
+
+          {/* Unified dropdown menu */}
+          {showExportMenu && !exporting && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 4,
+              backgroundColor: 'white',
+              border: '1px solid #dee2e6',
+              borderRadius: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              minWidth: 220
+            }}>
+              {/* Metrics Only */}
+              <div style={{ padding: '4px 8px', fontSize: 11, fontWeight: 'bold', color: '#6c757d', borderBottom: '1px solid #dee2e6' }}>Metrics Only</div>
+              <button onClick={() => handleUnifiedExport('metrics-csv')} style={menuItemStyle} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>CSV</button>
+              <button onClick={() => handleUnifiedExport('metrics-json')} style={menuItemStyle} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>JSON</button>
+              <button onClick={() => handleUnifiedExport('metrics-lineprotocol')} style={{...menuItemStyle, borderBottom: '2px solid #dee2e6'}} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>Line Protocol (DB Format)</button>
+
+              {/* Combined */}
+              <div style={{ padding: '4px 8px', fontSize: 11, fontWeight: 'bold', color: '#6c757d', borderBottom: '1px solid #dee2e6' }}>Combined</div>
+              <button onClick={() => handleUnifiedExport('combined-csv-inline')} style={menuItemStyle} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>Metrics (CSV + Inline)</button>
+              <button onClick={() => handleUnifiedExport('combined-json-inline')} style={menuItemStyle} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>Metrics (JSON + Inline)</button>
+            </div>
+          )}
         </div>
       </div>
 
