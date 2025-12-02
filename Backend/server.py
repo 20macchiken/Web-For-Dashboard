@@ -5,7 +5,10 @@ import time
 import logging
 import atexit
 import os
-import requests
+import csv
+from io import StringIO, BytesIO
+import json
+import zipfile
 
 from supabase import create_client, Client  # NEW
 
