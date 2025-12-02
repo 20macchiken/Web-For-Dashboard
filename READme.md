@@ -9,7 +9,7 @@ This project focuses on resource utilization and performance analysis of virtual
 
 # Project Contributors
 
-Onwara Durongpinon 6522771649
-Pawarit Sombatpiboon 6522772670
-Pattarapong Tiemtan 6522780897
-Prime Wongsaard 6522781465
+- Onwara Durongpinon 6522771649
+- Pawarit Sombatpiboon 6522772670
+- Pattarapong Tiemtan 6522780897
+- Prime Wongsaard 6522781465
