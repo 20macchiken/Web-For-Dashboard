@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 import time
 import logging
 import atexit
-import os  # NEW
+import os
+import requests
 
 from supabase import create_client, Client  # NEW
 
