@@ -243,6 +243,90 @@ def test_connection() -> bool:
         return False
 
 
+def get_historical_metrics(start_time: str, end_time: str) -> Dict[str, list]:
+    try:
+        bucket = os.getenv('INFLUXDB_BUCKET', 'proxmox_metrics')
+        query_api = get_query_api()
+
+        results = {
+            'cpu': [],
+            'memory': [],
+            'storage': []
+        }
+
+        # Query CPU metrics
+        cpu_query = f'''
+from(bucket: "{bucket}")
+  |> range(start: {start_time}, stop: {end_time})
+  |> filter(fn: (r) => r._measurement == "cpustat")
+  |> filter(fn: (r) => r._field == "cpu")
+  |> map(fn: (r) => ({{ r with _value: r._value * 100.0 }}))
+'''
+
+        cpu_result = query_api.query(cpu_query)
+        for table in cpu_result:
+            for record in table.records:
+                results['cpu'].append({
+                    'time': record.get_time().isoformat() if record.get_time() else None,
+                    'host': record.values.get('host', 'unknown'),
+                    'value': float(record.get_value()) if record.get_value() is not None else 0.0
+                })
+
+        # Query Memory metrics
+        mem_query = f'''
+memUsed = from(bucket: "{bucket}")
+  |> range(start: {start_time}, stop: {end_time})
+  |> filter(fn: (r) => r._measurement == "memory")
+  |> filter(fn: (r) => r._field == "memused")
+
+memTotal = from(bucket: "{bucket}")
+  |> range(start: {start_time}, stop: {end_time})
+  |> filter(fn: (r) => r._measurement == "memory")
+  |> filter(fn: (r) => r._field == "memtotal")
+
+join(tables: {{used: memUsed, total: memTotal}}, on: ["host", "_time"])
+  |> map(fn: (r) => ({{
+      _time: r._time,
+      _value: r._value_used / r._value_total * 100.0,
+      host: r.host
+    }}))
+'''
+
+        mem_result = query_api.query(mem_query)
+        for table in mem_result:
+            for record in table.records:
+                results['memory'].append({
+                    'time': record.get_time().isoformat() if record.get_time() else None,
+                    'host': record.values.get('host', 'unknown'),
+                    'value': float(record.get_value()) if record.get_value() is not None else 0.0
+                })
+
+        # Query Storage metrics
+        storage_query = f'''
+from(bucket: "{bucket}")
+  |> range(start: {start_time}, stop: {end_time})
+  |> filter(fn: (r) => r._measurement == "blockstat")
+  |> filter(fn: (r) => r._field == "per")
+'''
+
+        storage_result = query_api.query(storage_query)
+        for table in storage_result:
+            for record in table.records:
+                results['storage'].append({
+                    'time': record.get_time().isoformat() if record.get_time() else None,
+                    'host': record.values.get('host', 'unknown'),
+                    'path': record.values.get('path', '/'),
+                    'value': float(record.get_value()) if record.get_value() is not None else 0.0
+                })
+
+        logger.info(f"Retrieved {len(results['cpu'])} CPU, {len(results['memory'])} memory, {len(results['storage'])} storage metrics")
+        return results
+
+    except Exception as e:
+        logger.error(f"Error querying historical metrics: {str(e)}")
+        return {'cpu': [], 'memory': [], 'storage': []}
+
+
 if __name__ == "__main__":
     # Test the connection when run directly
     logging.basicConfig(level=logging.DEBUG)
