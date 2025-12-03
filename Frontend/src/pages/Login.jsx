@@ -70,111 +70,8 @@ export default function Login() {
         </h2>
 
         <p style={{ marginBottom: "24px", textAlign: "center", color: "#666" }}>
-          {mode === "login" ? "Please login" : "Create an account"}
+          {mode === "login" ? "Please login with Google Auth to Identify yourself" : "Create an account"}
         </p>
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "16px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "500",
-              }}
-            >
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="yourname@siit.tu.ac.th"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-              }}
-              autoFocus
-            />
-          </div>
-
-          <div style={{ marginBottom: "16px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "500",
-              }}
-            >
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                border: "1px solid #ddd",
-                borderRadius: "4px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          {error && (
-            <div
-              style={{
-                padding: "10px",
-                marginBottom: "12px",
-                backgroundColor: "#fee",
-                color: "#c33",
-                borderRadius: "4px",
-                fontSize: "14px",
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {info && (
-            <div
-              style={{
-                padding: "10px",
-                marginBottom: "12px",
-                backgroundColor: "#eef",
-                color: "#225",
-                borderRadius: "4px",
-                fontSize: "14px",
-              }}
-            >
-              {info}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            style={{
-              width: "100%",
-              padding: "12px",
-              backgroundColor: "#007bff",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              fontSize: "16px",
-              fontWeight: "500",
-              cursor: "pointer",
-              boxSizing: "border-box",
-            }}
-          >
-            {mode === "login" ? "Login" : "Sign up"}
-          </button>
-        </form>
 
         {/* Sign in to Google button */}
         <button
@@ -195,34 +92,6 @@ export default function Login() {
         >
           Continue with Google
         </button>
-
-        <div style={{ marginTop: 12, textAlign: "center" }}>
-          {mode === "login" ? (
-            <button
-              onClick={() => setMode("signup")}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#007bff",
-                cursor: "pointer",
-              }}
-            >
-              No account? Sign up
-            </button>
-          ) : (
-            <button
-              onClick={() => setMode("login")}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#007bff",
-                cursor: "pointer",
-              }}
-            >
-              Already have an account? Login
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
